@@ -1,0 +1,21 @@
+{
+  "name": "pi-browser",
+  "version": "0.1.0",
+  "description": "Browser automation tools for the pi coding agent, backed by Playwright",
+  "license": "MIT",
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "dependencies": {
+    "@mariozechner/pi-coding-agent": "^0.60.0",
+    "@sinclair/typebox": "0.34.48",
+    "playwright": "^1.52.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.3"
+  }
+}
