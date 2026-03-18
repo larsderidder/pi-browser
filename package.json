@@ -8,7 +8,14 @@
     "url": "https://github.com/larsderidder/pi-browser.git"
   },
   "homepage": "https://github.com/larsderidder/pi-browser#readme",
-  "keywords": ["pi-package", "pi-extension", "browser", "playwright", "browser-automation", "cdp"],
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "browser",
+    "playwright",
+    "browser-automation",
+    "cdp"
+  ],
   "type": "module",
   "pi": {
     "extensions": [
@@ -22,6 +29,11 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
   }
 }
