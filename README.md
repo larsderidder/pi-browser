@@ -1,10 +1,12 @@
 # pi-browser
 
-Browser automation tools for the [pi coding agent](https://github.com/mariozechner/pi-coding-agent), backed by Playwright.
+A pi extension that gives the agent a real browser, backed by Playwright.
 
-Connect pi to your running Chromium-based browser via CDP, or let it launch one. Gives you 50+ tools to navigate, click, type, screenshot, inspect the DOM, manage cookies, intercept network requests, and more — all from within a pi session.
+Connect to your running Chromium-based browser via CDP, or let the extension launch one; once connected, you get 50+ tools covering navigation, clicking, typing, form filling, screenshots, tab management, cookie manipulation, network interception, localStorage, console messages, dialogs, and file upload.
 
-## Installation
+The main thing that makes this different from other pi browser tools is that it attaches to a browser that's already open. You're looking at a page, you tell pi to interact with it, and it does, without a separate browser window or starting fresh.
+
+## Install
 
 ```bash
 cd ~/.pi/agent/extensions
@@ -13,11 +15,11 @@ cd pi-browser
 npm install
 ```
 
-Pi will pick up the extension automatically on next launch.
+Pi picks up the extension on next launch.
 
 ## Browser setup
 
-For the best experience, configure your browser to always start with remote debugging enabled.
+Configure your browser to always start with remote debugging enabled so pi can attach.
 
 ### Chromium (port 9222)
 
@@ -45,29 +47,28 @@ Terminal=false
 Type=Application
 ```
 
+If you run both at the same time, the second one won't bind its port and will launch normally without CDP. Use different ports to avoid this.
+
 ## Usage
 
-Once connected, browser tools are available in any pi session.
+```
+/browser connect        # attach to Chromium on port 9222
+/browser connect 9223   # attach to Brave
+/browser launch         # launch a new Chromium instance
+/browser status         # show connection and open tabs
+/browser disconnect
+```
 
-### Commands
+Once connected, the browser tools are available for the rest of the session.
 
-| Command | Description |
-|---------|-------------|
-| `/browser connect [port]` | Attach to a running browser (default: 9222) |
-| `/browser launch [chromium\|firefox\|webkit]` | Launch a new browser |
-| `/browser status` | Show connection status and open tabs |
-| `/browser disconnect` | Release the connection |
-
-### Tools
+## Tools
 
 **Navigation**
-- `browser_navigate` — Navigate to a URL
-- `browser_navigate_back` — Go back in history
-- `browser_reload` — Reload the current page
+- `browser_navigate`, `browser_navigate_back`, `browser_reload`
 
 **Observation**
-- `browser_snapshot` — Capture the accessibility tree (use this to find element refs)
-- `browser_take_screenshot` — Take a screenshot
+- `browser_snapshot` — accessibility tree, gives element refs for interaction
+- `browser_take_screenshot`
 
 **Interaction**
 - `browser_click`, `browser_hover`, `browser_drag`
@@ -75,7 +76,7 @@ Once connected, browser tools are available in any pi session.
 - `browser_select_option`
 
 **Tabs**
-- `browser_tabs` — List, create, close, or select tabs
+- `browser_tabs` — list, create, close, or select; shows tabs across all windows
 
 **Mouse**
 - `browser_mouse_move_xy`, `browser_mouse_click_xy`, `browser_mouse_drag_xy`
@@ -96,17 +97,16 @@ Once connected, browser tools are available in any pi session.
 - `browser_storage_state`, `browser_set_storage_state`
 
 **Other**
-- `browser_evaluate` — Run JavaScript on the page
-- `browser_wait_for` — Wait for text or a timeout
+- `browser_evaluate` — run JavaScript on the page
+- `browser_wait_for`
 - `browser_close`, `browser_resize`
 - `browser_file_upload`
 
 ## Notes
 
-- Only Chromium-based browsers are supported for CDP attach (Chrome, Chromium, Brave, Edge, Opera).
-- If you run both Chromium and Brave simultaneously, use different ports (9222 and 9223).
-- Tabs in separate browser windows are shown in `browser_tabs` but marked as "different window". Selecting one navigates your current tab to that URL.
-- Browser extensions (e.g. Bitwarden) run in an isolated context and cannot be interacted with via CDP.
+- Only Chromium-based browsers support CDP attach (Chrome, Chromium, Brave, Edge, Opera). Firefox doesn't.
+- Tabs in separate browser windows show up in `browser_tabs` with a warning. Selecting one navigates your current tab to that URL instead of controlling the original window directly; that's a Playwright CDP limitation.
+- Browser extensions (Bitwarden etc.) run in an isolated context that CDP can't reach.
 
 ## License
 
