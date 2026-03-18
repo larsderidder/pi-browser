@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "description": "Browser automation tools for the pi coding agent, backed by Playwright",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/larsderidder/pi-browser.git"
+  },
+  "homepage": "https://github.com/larsderidder/pi-browser#readme",
+  "keywords": ["pi-package", "pi-extension", "browser", "playwright", "browser-automation", "cdp"],
   "type": "module",
   "pi": {
     "extensions": [

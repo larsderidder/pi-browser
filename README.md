@@ -7,7 +7,6 @@ Connect pi to your running Chromium-based browser via CDP, or let it launch one.
 ## Installation
 
 ```bash
-# From your pi extensions directory
 cd ~/.pi/agent/extensions
 git clone https://github.com/larsderidder/pi-browser
 cd pi-browser
