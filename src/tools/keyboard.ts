@@ -5,7 +5,25 @@ export const type = defineTabTool({
   schema: {
     name: 'browser_type',
     title: 'Type text',
-    description: 'Type text into an editable element',
+    description: `Type text into an editable element.
+
+**Fallback for reactive frameworks (Vue, React, etc.):** If this tool fails or the text
+does not bind (e.g. the field appears filled but the framework state is not updated),
+use \`browser_evaluate\` instead:
+
+\`\`\`js
+() => {
+  const el = document.querySelector('your-selector');
+  el.focus();
+  document.execCommand('insertText', false, 'your text');
+  return el.value;
+}
+\`\`\`
+
+\`document.execCommand('insertText')\` fires the native input event that reactive frameworks
+listen to, whereas \`locator.fill()\` sets the DOM value directly and may bypass framework
+reactivity. Use \`execCommand\` as the fallback whenever \`browser_type\` or \`browser_fill_form\`
+silently fails on a reactive app.`,
     type: 'input',
   },
   handle: async (tab, params, result) => {
