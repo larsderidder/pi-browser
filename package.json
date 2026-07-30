@@ -23,7 +23,8 @@
     ]
   },
   "dependencies": {
-    "playwright": "^1.52.0"
+    "playwright": "^1.52.0",
+    "ws": "^8.21.1"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
@@ -37,5 +38,8 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest"
+  },
+  "patchedDependencies": {
+    "playwright-core@1.61.1": ".patches/playwright-core@1.61.1.patch"
   }
 }
