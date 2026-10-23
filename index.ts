@@ -22,9 +22,11 @@
  *   browser_close, browser_resize
  */
 
-import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import path from 'node:path';
+import { getAgentDir, type ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import { BrowserSession } from './src/browser-session';
+import { BrowserSettingsStore, type BrowserSettings } from './src/settings';
 import { BrowserToolResult } from './src/response';
 import type { Context } from './src/context';
 import type { Tool } from './src/tool';
@@ -51,19 +53,56 @@ import storageTools from './src/tools/storage';
 // Helper type so params coming from pi can be cast safely
 type Params = Record<string, any>;
 
-function makeTool(session: BrowserSession, tool: Tool) {
+const DEFAULT_CONFIG = { timeouts: { action: 10000, navigation: 30000 } };
+
+function makeTool(getContext: () => Promise<Context>, tool: Tool) {
   return async (params: Params) => {
-    const context = session.context;
-    if (!context)
-      throw new Error('Browser not connected. Use /browser connect [port] or /browser launch first.');
-    const result = new BrowserToolResult(context as Context);
-    await tool.handle(context as Context, params, result);
+    const context = await getContext();
+    const result = new BrowserToolResult(context);
+    await tool.handle(context, params, result);
     return result.build();
   };
 }
 
 export default function (pi: ExtensionAPI) {
   const session = new BrowserSession();
+  const settings = new BrowserSettingsStore(path.join(getAgentDir(), 'pi-browser.json'));
+  let autoLaunchPromise: Promise<void> | undefined;
+  let browserOperation: Promise<void> = Promise.resolve();
+
+  async function getContext(): Promise<Context> {
+    if (session.context) {
+      return session.context;
+    }
+    if (!autoLaunchPromise) {
+      // Share settings lookup and launch so parallel tool calls cannot open two browsers.
+      autoLaunchPromise = queueBrowserOperation(async () => {
+        if (session.context) {
+          return;
+        }
+        const config = await settings.load();
+        if (!config.autoLaunch) {
+          throw new Error('Browser not connected. Use /browser connect [port], /browser launch, or enable /browser auto-launch on.');
+        }
+        await session.connect({ type: 'launch', browserName: 'chromium', headless: config.headless }, DEFAULT_CONFIG);
+      }).finally(() => {
+        autoLaunchPromise = undefined;
+      });
+    }
+    await autoLaunchPromise;
+    const context = session.context;
+    if (!context) {
+      throw new Error('Browser disconnected during auto-launch.');
+    }
+    return context;
+  }
+
+  function queueBrowserOperation(operation: () => Promise<void>): Promise<void> {
+    const pending = browserOperation.then(operation);
+    // A failed connection must not block later manual recovery or shutdown.
+    browserOperation = pending.then(() => undefined, () => undefined);
+    return pending;
+  }
 
   // Collect all tool implementations indexed by name
   const toolMap = new Map<string, Tool>();
@@ -78,7 +117,7 @@ export default function (pi: ExtensionAPI) {
 
   function run(name: string) {
     const tool = toolMap.get(name)!;
-    return makeTool(session, tool);
+    return makeTool(getContext, tool);
   }
 
   // ---------- Navigation ----------
@@ -644,12 +683,57 @@ export default function (pi: ExtensionAPI) {
   // ---------- /browser command ----------
 
   pi.registerCommand('browser', {
-    description: 'Manage browser connection: connect [port], launch [browser], status, disconnect',
+    description: 'Manage browser connection and settings: connect, launch, status, disconnect, auto-launch [on|off], headless [on|off]',
     handler: async (args, ctx) => {
       const parts = (args ?? '').trim().split(/\s+/).filter(Boolean);
       const sub = parts[0];
 
+      if (sub === 'auto-launch' || sub === 'headless') {
+        if (parts.length > 2 || (parts[1] !== undefined && parts[1] !== 'on' && parts[1] !== 'off')) {
+          ctx.ui.notify(`Usage: /browser ${sub} [on|off]`, 'error');
+          return;
+        }
+        let key: 'autoLaunch' | 'headless' = 'headless';
+        let label = 'Headless';
+        if (sub === 'auto-launch') {
+          key = 'autoLaunch';
+          label = 'Auto-launch';
+        }
+        try {
+          let config: BrowserSettings;
+          if (parts[1] === undefined) {
+            config = await settings.load();
+          } else {
+            config = await settings.update({ [key]: parts[1] === 'on' });
+          }
+          let value = 'off';
+          if (config[key]) {
+            value = 'on';
+          }
+          ctx.ui.notify(`${label}: ${value}\nSettings: ${settings.filename}`, 'info');
+        } catch (error) {
+          ctx.ui.notify(String(error), 'error');
+        }
+        return;
+      }
+
       if (!sub || sub === 'status') {
+        await browserOperation;
+        let config: BrowserSettings;
+        try {
+          config = await settings.load();
+        } catch (error) {
+          ctx.ui.notify(String(error), 'error');
+          return;
+        }
+        let autoLaunch = 'off';
+        let headless = 'off';
+        if (config.autoLaunch) {
+          autoLaunch = 'on';
+        }
+        if (config.headless) {
+          headless = 'on';
+        }
         const tabs = session.context?.tabs() ?? [];
         const tabLines = await Promise.all(
           tabs.map(async (t, i) => {
@@ -657,7 +741,13 @@ export default function (pi: ExtensionAPI) {
             return `  ${i}: ${h.current ? '* ' : '  '}[${h.title || 'blank'}] ${h.url}`;
           })
         );
-        const msg = [`Browser: ${session.status()}`, ...(tabLines.length ? ['Tabs:', ...tabLines] : [])].join('\n');
+        const msg = [
+          `Browser: ${session.status()}`,
+          `Auto-launch: ${autoLaunch}`,
+          `Headless: ${headless}`,
+          `Settings: ${settings.filename}`,
+          ...(tabLines.length ? ['Tabs:', ...tabLines] : []),
+        ].join('\n');
         ctx.ui.notify(msg, 'info');
         return;
       }
@@ -666,7 +756,7 @@ export default function (pi: ExtensionAPI) {
         const port = parseInt(parts[1] ?? '9222', 10);
         ctx.ui.notify(`Connecting to browser on port ${port}...`, 'info');
         try {
-          await session.connect({ type: 'cdp', port }, { timeouts: { action: 10000, navigation: 30000 } });
+          await queueBrowserOperation(() => session.connect({ type: 'cdp', port }, DEFAULT_CONFIG));
           const tabCount = session.context?.tabs().length ?? 0;
           ctx.ui.notify(`Connected via CDP (port ${port}). ${tabCount} tab(s) found.`, 'info');
         } catch (e: any) {
@@ -676,10 +766,17 @@ export default function (pi: ExtensionAPI) {
       }
 
       if (sub === 'launch') {
-        const browserName = (parts[1] ?? 'chromium') as 'chromium' | 'firefox' | 'webkit';
+        const browserName = parts[1] ?? 'chromium';
+        if (browserName !== 'chromium' && browserName !== 'firefox' && browserName !== 'webkit') {
+          ctx.ui.notify('Usage: /browser launch [chromium|firefox|webkit]', 'error');
+          return;
+        }
         ctx.ui.notify(`Launching ${browserName}...`, 'info');
         try {
-          await session.connect({ type: 'launch', browserName }, { timeouts: { action: 10000, navigation: 30000 } });
+          await queueBrowserOperation(async () => {
+            const config = await settings.load();
+            await session.connect({ type: 'launch', browserName, headless: config.headless }, DEFAULT_CONFIG);
+          });
           ctx.ui.notify(`Launched ${browserName}.`, 'info');
         } catch (e: any) {
           ctx.ui.notify(`Launch failed: ${e.message}`, 'error');
@@ -688,13 +785,13 @@ export default function (pi: ExtensionAPI) {
       }
 
       if (sub === 'disconnect') {
-        await session.disconnect();
+        await queueBrowserOperation(() => session.disconnect());
         ctx.ui.notify('Browser disconnected.', 'info');
         return;
       }
 
       ctx.ui.notify(
-        'Usage: /browser [connect [port] | launch [chromium|firefox|webkit] | status | disconnect]',
+        'Usage: /browser [connect [port] | launch [chromium|firefox|webkit] | status | disconnect | auto-launch [on|off] | headless [on|off]]',
         'info'
       );
     },
@@ -702,6 +799,6 @@ export default function (pi: ExtensionAPI) {
 
   // Clean up on session shutdown
   pi.on('session_shutdown', async () => {
-    await session.disconnect();
+    await queueBrowserOperation(() => session.disconnect());
   });
 }

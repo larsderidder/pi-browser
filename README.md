@@ -61,11 +61,34 @@ If you run multiple browsers at the same time, give each a different port. Two b
 /browser connect        # attach to browser on port 9222 (default)
 /browser connect 9223   # attach on a specific port
 /browser launch         # launch a new Chromium instance
-/browser status         # show connection and open tabs
+/browser status         # show connection, settings, and open tabs
 /browser disconnect
+/browser auto-launch on # enable automatic launch on first tool use
+/browser auto-launch off
+/browser headless on    # use headless mode for future launches
+/browser headless off
 ```
 
 Once connected, the browser tools are available for the rest of the session.
+
+### Configuration
+
+Auto-launch is disabled by default. When enabled, a browser tool launches Chromium only if no browser is connected. Existing connections are reused. Turning auto-launch off does not close a connected browser. If it remains enabled after `/browser disconnect`, the next browser tool can launch a new browser.
+
+Preferences are stored in `~/.pi/agent/pi-browser.json`, or in Pi's agent directory when overridden:
+
+```json
+{
+  "autoLaunch": false,
+  "headless": false
+}
+```
+
+Both settings are optional booleans and default to `false`. Launches remain headed unless `headless` is enabled; this setting applies to both automatic launches and `/browser launch`, not to an attached browser.
+
+The `/browser auto-launch on|off` and `/browser headless on|off` operations save these preferences across sessions and projects. Omit `on|off` to inspect a setting without changing it. `/browser status` shows both preferences and the configuration path.
+
+Direct file edits apply on the next settings read or launch without reloading Pi. Missing files use the defaults; invalid files report an error and are not overwritten by settings operations. Changing `headless` affects future launches, not an already running browser.
 
 ## Tools
 

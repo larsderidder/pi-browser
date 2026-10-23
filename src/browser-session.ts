@@ -9,8 +9,8 @@ import type { ContextConfig } from './context';
 
 export type ConnectionMode =
   | { type: 'cdp'; port: number }
-  | { type: 'launch'; browserName?: 'chromium' | 'firefox' | 'webkit' }
-  | { type: 'isolated'; browserName?: 'chromium' | 'firefox' | 'webkit' };
+  | { type: 'launch'; browserName?: 'chromium' | 'firefox' | 'webkit'; headless?: boolean }
+  | { type: 'isolated'; browserName?: 'chromium' | 'firefox' | 'webkit'; headless?: boolean };
 
 export class BrowserSession {
   private _browser: pw.Browser | null = null;
@@ -46,14 +46,13 @@ export class BrowserSession {
         const allTargets: CdpTarget[] = await resp.json();
 
         this._context = new Context(contexts, config, { port: mode.port, allTargets });
-        this._browser.on('disconnected', () => { this._browser = null; this._context = null; });
         break;
       }
 
       case 'launch': {
         const browserType = pw[mode.browserName ?? 'chromium'];
         const browserContext = await browserType.launchPersistentContext('', {
-          headless: false,
+          headless: mode.headless ?? false,
           handleSIGINT: false,
           handleSIGTERM: false,
         });
@@ -65,7 +64,7 @@ export class BrowserSession {
       case 'isolated': {
         const browserType = pw[mode.browserName ?? 'chromium'];
         this._browser = await browserType.launch({
-          headless: false,
+          headless: mode.headless ?? false,
           handleSIGINT: false,
           handleSIGTERM: false,
         });
@@ -74,6 +73,15 @@ export class BrowserSession {
         break;
       }
     }
+
+    const browser = this._browser;
+    browser?.on('disconnected', () => {
+      if (this._browser === browser) {
+        this._browser = null;
+        this._context = null;
+        this._mode = null;
+      }
+    });
   }
 
   async disconnect(): Promise<void> {
