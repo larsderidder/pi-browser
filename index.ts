@@ -139,11 +139,12 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: 'browser_take_screenshot',
     label: 'Take screenshot',
-    description: "Take a screenshot of the current page. Use browser_snapshot for interactions; use this to visually inspect.",
+    description: "Take a screenshot of the current page. Use browser_snapshot for interactions; use this to visually inspect. Pass filename to also save the image to disk; the saved path is returned in the result.",
     parameters: Type.Object({
       type: Type.Optional(Type.String({ description: 'Image format: png or jpeg (default: png)' })),
       selector: Type.Optional(Type.String({ description: 'CSS selector of element to screenshot' })),
       fullPage: Type.Optional(Type.Boolean({ description: 'Capture the full scrollable page' })),
+      filename: Type.Optional(Type.String({ minLength: 1, description: 'Path to save the screenshot to. Relative paths resolve against the current working directory; parent directories are created and existing files are overwritten. Omit to only return the image inline.' })),
     }),
     async execute(_id, params) {
       const r = await run('browser_take_screenshot')(params as Params);

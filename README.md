@@ -82,7 +82,7 @@ Once connected, the browser tools are available for the rest of the session.
 | Tool | Description |
 |------|-------------|
 | `browser_snapshot` | Capture the accessibility tree; returns element refs for interaction |
-| `browser_take_screenshot` | Take a screenshot of the page or a specific element |
+| `browser_take_screenshot` | Take a screenshot of the page or a specific element; optionally save to disk with `filename` while still returning the image inline |
 
 ### Interaction
 

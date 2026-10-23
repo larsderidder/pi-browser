@@ -1,3 +1,5 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { defineTabTool } from '../tool';
 
 export const screenshot = defineTabTool({
@@ -5,10 +7,14 @@ export const screenshot = defineTabTool({
   schema: {
     name: 'browser_take_screenshot',
     title: 'Take a screenshot',
-    description: "Take a screenshot of the current page. You can't interact based on screenshots; use browser_snapshot for that.",
-    type: 'readOnly',
+    description: "Take a screenshot of the current page. You can't interact based on screenshots; use browser_snapshot for that. Pass filename to also save the image to disk; the saved path is returned in the result.",
+    type: 'action',
   },
   handle: async (tab, params, result) => {
+    if (params.filename !== undefined && (typeof params.filename !== 'string' || params.filename.length === 0)) {
+      throw new Error('Filename must be a non-empty string.');
+    }
+
     const imageType: 'png' | 'jpeg' = params.type === 'jpeg' ? 'jpeg' : 'png';
     const options: Record<string, any> = {
       type: imageType,
@@ -30,6 +36,14 @@ export const screenshot = defineTabTool({
     }
 
     result.addCode(`// ${codeTarget}`);
+
+    if (params.filename !== undefined) {
+      const savePath = path.resolve(params.filename);
+      await fs.mkdir(path.dirname(savePath), { recursive: true });
+      await fs.writeFile(savePath, data);
+      result.addTextResult(`Screenshot saved to ${savePath}`);
+    }
+
     await result.registerImageResult(data, imageType);
   },
 });
