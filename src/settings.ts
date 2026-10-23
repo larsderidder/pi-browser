@@ -4,6 +4,7 @@ import path from 'node:path';
 
 export type BrowserSettings = {
   autoLaunch: boolean;
+  toolAutoLaunch: boolean;
   headless: boolean;
 };
 
@@ -20,7 +21,7 @@ export class BrowserSettingsStore {
       content = await fs.readFile(this.filename, 'utf8');
     } catch (error) {
       if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-        return { autoLaunch: false, headless: false };
+        return { autoLaunch: false, toolAutoLaunch: false, headless: false };
       }
       throw new Error(`Cannot read browser settings at ${this.filename}`, { cause: error });
     }
@@ -30,9 +31,9 @@ export class BrowserSettingsStore {
       if (!value || typeof value !== 'object' || Array.isArray(value)) {
         throw new Error('Expected a JSON object.');
       }
-      const settings: BrowserSettings = { autoLaunch: false, headless: false };
+      const settings: BrowserSettings = { autoLaunch: false, toolAutoLaunch: false, headless: false };
       for (const [key, setting] of Object.entries(value)) {
-        if (key !== 'autoLaunch' && key !== 'headless') {
+        if (key !== 'autoLaunch' && key !== 'toolAutoLaunch' && key !== 'headless') {
           throw new Error(`Unknown setting: ${key}`);
         }
         if (typeof setting !== 'boolean') {
@@ -42,7 +43,7 @@ export class BrowserSettingsStore {
       }
       return settings;
     } catch (error) {
-      throw new Error(`Invalid browser settings at ${this.filename}. Expected autoLaunch and headless booleans.`, { cause: error });
+      throw new Error(`Invalid browser settings at ${this.filename}. Expected autoLaunch, toolAutoLaunch, and headless booleans.`, { cause: error });
     }
   }
 

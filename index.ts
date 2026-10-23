@@ -67,32 +67,32 @@ function makeTool(getContext: () => Promise<Context>, tool: Tool) {
 export default function (pi: ExtensionAPI) {
   const session = new BrowserSession();
   const settings = new BrowserSettingsStore(path.join(getAgentDir(), 'pi-browser.json'));
-  let autoLaunchPromise: Promise<void> | undefined;
+  let toolLaunchPromise: Promise<void> | undefined;
   let browserOperation: Promise<void> = Promise.resolve();
 
   async function getContext(): Promise<Context> {
     if (session.context) {
       return session.context;
     }
-    if (!autoLaunchPromise) {
+    if (!toolLaunchPromise) {
       // Share settings lookup and launch so parallel tool calls cannot open two browsers.
-      autoLaunchPromise = queueBrowserOperation(async () => {
+      toolLaunchPromise = queueBrowserOperation(async () => {
         if (session.context) {
           return;
         }
         const config = await settings.load();
-        if (!config.autoLaunch) {
-          throw new Error('Browser not connected. Use /browser connect [port], /browser launch, or enable /browser auto-launch on.');
+        if (!config.toolAutoLaunch) {
+          throw new Error('Browser not connected. Use /browser connect [port], /browser launch, or enable /browser tool-auto-launch on.');
         }
         await session.connect({ type: 'launch', browserName: 'chromium', headless: config.headless }, DEFAULT_CONFIG);
       }).finally(() => {
-        autoLaunchPromise = undefined;
+        toolLaunchPromise = undefined;
       });
     }
-    await autoLaunchPromise;
+    await toolLaunchPromise;
     const context = session.context;
     if (!context) {
-      throw new Error('Browser disconnected during auto-launch.');
+      throw new Error('Browser disconnected during tool auto-launch.');
     }
     return context;
   }
@@ -683,21 +683,24 @@ export default function (pi: ExtensionAPI) {
   // ---------- /browser command ----------
 
   pi.registerCommand('browser', {
-    description: 'Manage browser connection and settings: connect, launch, status, disconnect, auto-launch [on|off], headless [on|off]',
+    description: 'Manage browser connection and settings: connect, launch, status, disconnect, auto-launch [on|off], tool-auto-launch [on|off], headless [on|off]',
     handler: async (args, ctx) => {
       const parts = (args ?? '').trim().split(/\s+/).filter(Boolean);
       const sub = parts[0];
 
-      if (sub === 'auto-launch' || sub === 'headless') {
+      if (sub === 'auto-launch' || sub === 'tool-auto-launch' || sub === 'headless') {
         if (parts.length > 2 || (parts[1] !== undefined && parts[1] !== 'on' && parts[1] !== 'off')) {
           ctx.ui.notify(`Usage: /browser ${sub} [on|off]`, 'error');
           return;
         }
-        let key: 'autoLaunch' | 'headless' = 'headless';
+        let key: keyof BrowserSettings = 'headless';
         let label = 'Headless';
         if (sub === 'auto-launch') {
           key = 'autoLaunch';
           label = 'Auto-launch';
+        } else if (sub === 'tool-auto-launch') {
+          key = 'toolAutoLaunch';
+          label = 'Tool auto-launch';
         }
         try {
           let config: BrowserSettings;
@@ -727,9 +730,13 @@ export default function (pi: ExtensionAPI) {
           return;
         }
         let autoLaunch = 'off';
+        let toolAutoLaunch = 'off';
         let headless = 'off';
         if (config.autoLaunch) {
           autoLaunch = 'on';
+        }
+        if (config.toolAutoLaunch) {
+          toolAutoLaunch = 'on';
         }
         if (config.headless) {
           headless = 'on';
@@ -744,6 +751,7 @@ export default function (pi: ExtensionAPI) {
         const msg = [
           `Browser: ${session.status()}`,
           `Auto-launch: ${autoLaunch}`,
+          `Tool auto-launch: ${toolAutoLaunch}`,
           `Headless: ${headless}`,
           `Settings: ${settings.filename}`,
           ...(tabLines.length ? ['Tabs:', ...tabLines] : []),
@@ -753,14 +761,36 @@ export default function (pi: ExtensionAPI) {
       }
 
       if (sub === 'connect') {
-        const port = parseInt(parts[1] ?? '9222', 10);
+        const portText = parts[1] ?? '9222';
+        const port = Number(portText);
+        if (parts.length > 2 || !/^\d+$/.test(portText) || !Number.isSafeInteger(port) || port < 1 || port > 65535) {
+          ctx.ui.notify('Usage: /browser connect [port 1-65535]', 'error');
+          return;
+        }
         ctx.ui.notify(`Connecting to browser on port ${port}...`, 'info');
         try {
-          await queueBrowserOperation(() => session.connect({ type: 'cdp', port }, DEFAULT_CONFIG));
+          let connection = `Connected via CDP (port ${port})`;
+          await queueBrowserOperation(async () => {
+            if (parts[1] === undefined && session.isConnected) {
+              connection = `Already ${session.status()}`;
+              return;
+            }
+            try {
+              await session.connect({ type: 'cdp', port }, DEFAULT_CONFIG);
+            } catch (error) {
+              const config = await settings.load();
+              if (!config.autoLaunch) {
+                throw error;
+              }
+              ctx.ui.notify(`Could not attach on port ${port}. Launching Chromium...`, 'info');
+              await session.connect({ type: 'launch', browserName: 'chromium', headless: config.headless }, DEFAULT_CONFIG);
+              connection = 'Connected to launched Chromium';
+            }
+          });
           const tabCount = session.context?.tabs().length ?? 0;
-          ctx.ui.notify(`Connected via CDP (port ${port}). ${tabCount} tab(s) found.`, 'info');
-        } catch (e: any) {
-          ctx.ui.notify(`Connection failed: ${e.message}`, 'error');
+          ctx.ui.notify(`${connection}. ${tabCount} tab(s) found.`, 'info');
+        } catch (error) {
+          ctx.ui.notify(`Connection failed: ${String(error)}`, 'error');
         }
         return;
       }
@@ -791,7 +821,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       ctx.ui.notify(
-        'Usage: /browser [connect [port] | launch [chromium|firefox|webkit] | status | disconnect | auto-launch [on|off] | headless [on|off]]',
+        'Usage: /browser [connect [port] | launch [chromium|firefox|webkit] | status | disconnect | auto-launch [on|off] | tool-auto-launch [on|off] | headless [on|off]]',
         'info'
       );
     },
